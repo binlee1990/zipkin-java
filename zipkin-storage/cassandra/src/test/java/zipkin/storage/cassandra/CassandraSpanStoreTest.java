@@ -14,7 +14,6 @@
 package zipkin.storage.cassandra;
 
 import zipkin.storage.SpanStoreTest;
-import zipkin.storage.StorageComponent;
 
 public class CassandraSpanStoreTest extends SpanStoreTest {
   private final CassandraStorage storage;
@@ -23,7 +22,7 @@ public class CassandraSpanStoreTest extends SpanStoreTest {
     this.storage = CassandraTestGraph.INSTANCE.storage.get();
   }
 
-  @Override protected StorageComponent storage() {
+  @Override protected CassandraStorage storage() {
     return storage;
   }
 

@@ -92,9 +92,13 @@ public final class CassandraSpanStore implements GuavaSpanStore {
   private final PreparedStatement selectTraceIdsBySpanDuration;
   private final Function<ResultSet, Map<Long, Long>> traceIdToTimestamp;
 
-  CassandraSpanStore(Session session, int bucketCount, int indexTtl, int maxTraceCols) {
+  CassandraSpanStore(Session session, int bucketCount, int maxTraceCols) {
     this.session = session;
-    this.indexTtl = indexTtl;
+    
+    this.indexTtl = session.getCluster().getMetadata()
+            .getKeyspace(session.getLoggedKeyspace()).getTable("span_duration_index")
+            .getOptions().getDefaultTimeToLive();
+
     this.maxTraceCols = maxTraceCols;
     ProtocolVersion protocolVersion = session.getCluster()
         .getConfiguration().getProtocolOptions().getProtocolVersion();

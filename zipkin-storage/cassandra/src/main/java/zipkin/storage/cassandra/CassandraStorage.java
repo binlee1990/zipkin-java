@@ -23,6 +23,8 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import zipkin.internal.Nullable;
 import zipkin.storage.guava.LazyGuavaStorageComponent;
 
@@ -51,8 +53,6 @@ public final class CassandraStorage
     String password;
     int maxTraceCols = 100000;
     int bucketCount = 10;
-    int spanTtl = (int) TimeUnit.DAYS.toSeconds(7);
-    int indexTtl = (int) TimeUnit.DAYS.toSeconds(3);
     SessionFactory sessionFactory = new SessionFactory.Default();
 
     /** Override to control how sessions are created. */
@@ -120,18 +120,6 @@ public final class CassandraStorage
       return this;
     }
 
-    /** Time-to-live in seconds for span data. Defaults to 604800 (7 days) */
-    public Builder spanTtl(int spanTtl) {
-      this.spanTtl = spanTtl;
-      return this;
-    }
-
-    /** Time-to-live in seconds for index data. Defaults to 259200 (3 days) */
-    public Builder indexTtl(int indexTtl) {
-      this.indexTtl = indexTtl;
-      return this;
-    }
-
     public CassandraStorage build() {
       return new CassandraStorage(this);
     }
@@ -140,9 +128,9 @@ public final class CassandraStorage
     }
   }
 
+  private static final Logger LOG = LoggerFactory.getLogger(CassandraStorage.class);
+
   final int maxTraceCols;
-  final int indexTtl;
-  final int spanTtl;
   final int bucketCount;
   final String contactPoints;
   final int maxConnections;
@@ -153,6 +141,8 @@ public final class CassandraStorage
   final String keyspace;
   final LazySession session;
 
+  private volatile long lazyAttemptTimestamp = 0;
+
   CassandraStorage(Builder builder) {
     this.contactPoints = builder.contactPoints;
     this.maxConnections = builder.maxConnections;
@@ -162,18 +152,26 @@ public final class CassandraStorage
     this.ensureSchema = builder.ensureSchema;
     this.keyspace = builder.keyspace;
     this.maxTraceCols = builder.maxTraceCols;
-    this.indexTtl = builder.indexTtl;
-    this.spanTtl = builder.spanTtl;
     this.bucketCount = builder.bucketCount;
     this.session = new LazySession(builder.sessionFactory, this);
   }
 
   @Override protected CassandraSpanStore computeGuavaSpanStore() {
-    return new CassandraSpanStore(session.get(), bucketCount, indexTtl, maxTraceCols);
+    return new CassandraSpanStore(session.get(), bucketCount, maxTraceCols);
   }
 
   @Override protected CassandraSpanConsumer computeGuavaSpanConsumer() {
-    return new CassandraSpanConsumer(session.get(), bucketCount, spanTtl, indexTtl);
+    if (lazyAttemptTimestamp + TimeUnit.SECONDS.toMillis(1) < System.currentTimeMillis()) {
+      lazyAttemptTimestamp = System.currentTimeMillis();
+      try {
+        return new CassandraSpanConsumer(session.get(), bucketCount);
+      } catch (IllegalStateException ex) {
+          LOG.error("uninitialized CassandraSpanCollector due to out-of-date schema. no spans will be collected.", ex);
+      } finally {
+          LOG.info("initialized CassandraSpanCollector. now collecting spans.");
+      }
+    }
+    return null;
   }
 
   @Override public CheckResult check() {

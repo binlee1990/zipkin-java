@@ -13,7 +13,6 @@
  */
 package zipkin.autoconfigure.storage.cassandra;
 
-import java.util.concurrent.TimeUnit;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import zipkin.storage.cassandra.CassandraStorage;
 
@@ -26,8 +25,6 @@ public class ZipkinCassandraStorageProperties {
   private boolean ensureSchema = true;
   private String username;
   private String password;
-  private int spanTtl = (int) TimeUnit.DAYS.toSeconds(7);
-  private int indexTtl = (int) TimeUnit.DAYS.toSeconds(3);
 
   public String getKeyspace() {
     return keyspace;
@@ -85,22 +82,6 @@ public class ZipkinCassandraStorageProperties {
     this.password = "".equals(password) ? null : password;
   }
 
-  public int getSpanTtl() {
-    return spanTtl;
-  }
-
-  public void setSpanTtl(int spanTtl) {
-    this.spanTtl = spanTtl;
-  }
-
-  public int getIndexTtl() {
-    return indexTtl;
-  }
-
-  public void setIndexTtl(int indexTtl) {
-    this.indexTtl = indexTtl;
-  }
-
   public CassandraStorage.Builder toBuilder() {
     return CassandraStorage.builder()
         .keyspace(keyspace)
@@ -109,8 +90,6 @@ public class ZipkinCassandraStorageProperties {
         .maxConnections(maxConnections)
         .ensureSchema(ensureSchema)
         .username(username)
-        .password(password)
-        .spanTtl(spanTtl)
-        .indexTtl(indexTtl);
+        .password(password);
   }
 }

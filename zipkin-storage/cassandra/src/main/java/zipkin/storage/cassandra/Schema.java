@@ -30,21 +30,20 @@ final class Schema {
 
   private static final String SCHEMA = "/cassandra-schema-cql3.txt";
 
+  private static final String UPGRADE_1 = "/cassandra-schema-cql3-upgrade1.txt";
+
   private Schema() {
   }
 
   static Map<String, String> readMetadata(Session session) {
     Map<String, String> metadata = new LinkedHashMap<>();
-    KeyspaceMetadata keyspaceMetadata =
-        getKeyspaceMetadata(session.getLoggedKeyspace(), session.getCluster());
+    KeyspaceMetadata keyspaceMetadata = getKeyspaceMetadata(session.getLoggedKeyspace(), session.getCluster());
 
     Map<String, String> replication = keyspaceMetadata.getReplication();
-    if ("SimpleStrategy".equals(replication.get("class")) && "1".equals(
-        replication.get("replication_factor"))) {
+    if ("SimpleStrategy".equals(replication.get("class")) && "1".equals(replication.get("replication_factor"))) {
       LOG.warn("running with RF=1, this is not suitable for production. Optimal is 3+");
     }
-    Map<String, String> tracesCompaction =
-        keyspaceMetadata.getTable("traces").getOptions().getCompaction();
+    Map<String, String> tracesCompaction = keyspaceMetadata.getTable("traces").getOptions().getCompaction();
     metadata.put("traces.compaction.class", tracesCompaction.get("class"));
     return metadata;
   }
@@ -61,7 +60,33 @@ final class Schema {
   }
 
   static void ensureExists(String keyspace, Session session) {
-    try (Reader reader = new InputStreamReader(Schema.class.getResourceAsStream(SCHEMA))) {
+      applyCqlFile(keyspace, session, SCHEMA);
+      ensureLatestSchema(keyspace, session);
+  }
+
+  private static void ensureLatestSchema(String keyspace, Session session) {
+      // upgrade_1
+      KeyspaceMetadata keyspaceMetadata = getKeyspaceMetadata(keyspace, session.getCluster());
+      if (0 == keyspaceMetadata.getTable("traces").getOptions().getDefaultTimeToLive()) {
+        applyCqlFile(keyspace, session, UPGRADE_1);
+      }
+  }
+
+  static boolean isLatestSchema(String keyspace, Session session) {
+      // we need some approach to forward-check compatibility as well.
+      //  backward: this code knows the current schema is too old.
+      //  forward:  this code knows the current schema is too new.
+
+      // upgrade_1
+      KeyspaceMetadata keyspaceMetadata = getKeyspaceMetadata(keyspace, session.getCluster());
+      int tracesTtl = keyspaceMetadata.getTable("traces").getOptions().getDefaultTimeToLive();
+      assert 0 < tracesTtl : "schema hasn't had upgrade_1 applied";
+
+      return 0 < tracesTtl;
+  }
+
+  private static void applyCqlFile(String keyspace, Session session, String resource) {
+    try (Reader reader = new InputStreamReader(Schema.class.getResourceAsStream(resource))) {
       for (String cmd : CharStreams.toString(reader).split(";")) {
         cmd = cmd.trim().replace(" zipkin", " " + keyspace);
         if (!cmd.isEmpty()) {

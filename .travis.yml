@@ -30,6 +30,7 @@ before_install:
   - curl -SL http://downloads.datastax.com/community/dsc-cassandra-2.2.5-bin.tar.gz | tar xz
   - sed -i -e 's/INFO/WARN/g' dsc-cassandra-*/conf/logback.xml
   - sudo dsc-cassandra-*/bin/cassandra
+  - sudo pip install ccm
   # install mysql schema
   - mysql -uroot -e 'SET GLOBAL innodb_file_format=Barracuda'
   - mysql -uroot -e 'create database if not exists zipkin'
